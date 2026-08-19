@@ -18,5 +18,11 @@ export const addClassSchema = z.object({
 });
 
 export const addStudentSchema = z.object({
-  studentId: z.string()
-})
+  studentId: z.string(),
+});
+
+export interface Student {
+  _id: string;
+  name: string;
+  email: string;
+}
