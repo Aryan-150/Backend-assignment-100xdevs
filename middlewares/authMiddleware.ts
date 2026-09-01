@@ -1,12 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
-import jwt, { type JwtPayload } from "jsonwebtoken";
+import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config";
-import type { UserRole } from "../models/user";
-
-interface CustomJwtPayload extends JwtPayload {
-  userId?: string;
-  role?: UserRole;
-}
+import type { CustomJwtPayload } from "../types";
 
 export function authMiddleware(
   req: Request,
@@ -36,7 +31,7 @@ export function authMiddleware(
     req.role = role;
     next();
   } catch (error) {
-    if(error instanceof jwt.JsonWebTokenError) {
+    if (error instanceof jwt.JsonWebTokenError) {
       res.status(401).json({
         success: false,
         error: "Unauthorized, token missing or invalid",

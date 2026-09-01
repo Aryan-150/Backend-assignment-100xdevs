@@ -310,7 +310,6 @@ classRouter.get("/:id/my-attendance", authMiddleware, async (req, res) => {
     const enrollmentCheck = existingClassWithClassId.studentIds.includes(
       new mongoose.Types.ObjectId(existingUserWithUserId._id),
     );
-    console.log(enrollmentCheck);
 
     if (!enrollmentCheck) {
       res.status(403).json({
