@@ -54,6 +54,13 @@ attendanceRouter.post(
       activeSession.teacherId = existingClassWithClassId.teacherId.toString();
       activeSession.startedAt = new Date().toISOString();
       activeSession.attendance = {};
+
+      for (const socket of allSockets) {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.close();
+        }
+      }
+
       allSockets.length = 0;
 
       res.status(200).json({

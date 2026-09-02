@@ -3,6 +3,8 @@ import { WebSocketEvents, type ActiveSession, type CustomJwtPayload, type Parsed
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "./config";
 import { UserRole } from "./models/user";
+import { classModel } from "./models/class";
+import { AttendanceStatus } from "./models/attendance";
 
 export const wss = new WebSocketServer({ noServer: true });
 
@@ -24,11 +26,14 @@ wss.on("connection", (ws, request) => {
     const { userId, role } = jwt.verify(token, JWT_SECRET) as CustomJwtPayload;
     if(!userId || !role) throw new Error("Unauthorized or invalid token");
 
+    // TODO: db call -> userId already exists in the activeSession.classId
+
     ws.user = {
       userId: userId,
       role: role
     };
     allSockets.push(ws);
+
   } catch (error: unknown) {
     const message =
       error instanceof jwt.JsonWebTokenError
@@ -50,7 +55,7 @@ wss.on("connection", (ws, request) => {
 
   ws.on("error", console.error);
 
-  ws.on("message", (data) => {
+  ws.on("message", async (data) => {
     const message = data.toString();
     if (!message || message.trim() === "") {
       ws.close();
@@ -78,19 +83,10 @@ wss.on("connection", (ws, request) => {
           
           activeSession.attendance[studentId] = status;
           allSockets.forEach((client) => {
-            console.log("control reached here inside clients callback");
-            client.send(JSON.stringify(parsedMessage));
+            if(client.readyState === WebSocket.OPEN){
+              client.send(JSON.stringify(parsedMessage));
+            }
           });
-          // wss.clients.forEach((client) => {
-          //   console.log("control reached here inside clients callback");
-          //   console.log(client, JSON.stringify(parsedMessage));
-            
-          //   if (client.readyState === WebSocket.OPEN) {
-          //     console.log("message starting to be sent");
-          //     client.send(JSON.stringify(parsedMessage));
-          //     console.log("message got sent");
-          //   }
-          // });
           
         } catch (error: unknown) {
           const message =
@@ -112,7 +108,57 @@ wss.on("connection", (ws, request) => {
         break;
     
       case WebSocketEvents.TODAY_SUMMARY:
+        try {
+          if (ws.user && ws.user.role !== UserRole.Teacher)
+            throw new Error("Forbidden, teacher event only");
 
+          if (activeSession.classId.trim() === "" || activeSession.teacherId !== ws.user?.userId)
+            throw new Error("No active attendance session");
+
+          const currentClass = await classModel
+            .findOne({
+              _id: activeSession.classId,
+            })
+            .lean();
+          if(!currentClass) 
+            throw new Error("Class not found");
+          
+          const total = currentClass.studentIds.length;
+          const present = Object.values(activeSession.attendance).filter(
+            (x) => x === AttendanceStatus.Present,
+          ).length;
+          const absent = total - present;
+
+          allSockets.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(
+                JSON.stringify({
+                  event: WebSocketEvents.TODAY_SUMMARY,
+                  data: {
+                    present: present,
+                    absent: absent,
+                    total: total,
+                  },
+                }),
+              );
+            }
+          });
+
+        } catch (error: unknown) {
+          const message =
+            error instanceof Error && error.message.trim() !== ""
+              ? error.message
+              : "Internal server error";
+
+          ws.send(
+            JSON.stringify({
+              event: WebSocketEvents.ERROR,
+              data: {
+                message: message,
+              },
+            }),
+          );
+        }
         break;
       
       default:
